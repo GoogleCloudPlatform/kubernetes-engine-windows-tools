@@ -1,0 +1,42 @@
+# Additional information on customizing the deployment manifest, in particular
+# if you are deploying a container when storing SSL certificates, or need to
+# configure gMSA:
+# https://cloud.google.com/migrate/anthos/help/win-deploying-to-target-cluster
+#
+# Make sure to replace the image name placeholder with your actual built image.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: v2kt-windows-20h2-core-xbdxivwsdz
+    migrate-for-anthos-optimization: "true"
+    migrate-for-anthos-version: b39eabbadf4912b80c882150a58016dc7f28a154f
+  name: v2kt-windows-20h2-core-xbdxivwsdz
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: v2kt-windows-20h2-core-xbdxivwsdz
+      migrate-for-anthos-optimization: "true"
+      migrate-for-anthos-version: b39eabbadf4912b80c882150a58016dc7f28a154f
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: v2kt-windows-20h2-core-xbdxivwsdz
+        migrate-for-anthos-optimization: "true"
+        migrate-for-anthos-version: b39eabbadf4912b80c882150a58016dc7f28a154f
+    spec:
+      containers:
+      - image: gcr.io/myproject/myimagename:v1.0.0
+        name: v2kt-windows-20h2-core-xbdxivwsdz-container
+        ports:
+        - containerPort: 80
+        - containerPort: 8080
+        resources: {}
+      nodeSelector:
+        kubernetes.io/os: windows
+status: {}
