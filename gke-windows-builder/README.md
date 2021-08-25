@@ -13,25 +13,6 @@ LTSC version comes out.
 
 # Building the gke-windows-builder container
 
-## Louhi
-
-We run several
-[flows](http://louhi.dev/?expandedFlows=f4e0769a-5068-4a39-b17a-f270ba368c83%2C55a7c4c9-07be-4f00-a707-c84092b5106c%2Ca6702de6-8e13-4a5d-87fe-d39719eeedff%2Cd5ffe6ec-cecc-4a93-95b0-9a0e630321e9&projectId=5116198637797376#/flows)
-in the GKE Windows Louhi project that build and test the gke-windows-builder.
-The code for those flows is
-[here](http://louhi-config-internal.git.corp.google.com/gke-windows/+/refs/heads/master).
-The flows are:
-
-*   *gke-windows-builder_ci*: continuous build.
-*   *gke-windows-builder_validate*: continuous test that uses the
-    gke-windows-builder to build a basic multi-arch Windows container.
-*   *gke-windows-builder_validate_aspnet*: continuous test that builds a more
-    sophisticated container.
-*   *gke-windows-builder_aspnet_manual_test*: manual flow for building a more
-    sophisticated container.
-*   *gke-windows-builder_release*: builds and tags a release version of the
-    gke-windows-builder. See http://go/gke-windows/gke-windows-builder-release.
-
 ## Manually
 
 During development you may need to manually build and run the builder from this
