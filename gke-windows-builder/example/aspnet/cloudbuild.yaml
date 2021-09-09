@@ -1,8 +1,0 @@
-timeout: 3600s
-steps:
-  - name: 'gcr.io/$PROJECT_ID/gke-windows-builder'
-    args:
-    - --container-image-name
-    - 'gcr.io/$PROJECT_ID/test-aspnet-4-gac32-64-windows:cloudbuild'
-    - --machineType
-    - 'n1-standard-4'
