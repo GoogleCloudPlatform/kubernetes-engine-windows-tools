@@ -1,4 +1,4 @@
-module windows-cloudbuild-builder/builder
+module gke-windows-builder/builder
 
 go 1.13
 
