@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"windows-cloudbuild-builder/builder/builder"
+	"gke-windows-builder/builder/builder"
 
 	"github.com/masterzen/winrm"
 	"google.golang.org/api/googleapi"
