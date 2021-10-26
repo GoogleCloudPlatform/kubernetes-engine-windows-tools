@@ -1,9 +1,7 @@
 # Description
 
-This tool is used to create a GKE Windows builder to build multi-arch
-containers using Cloud Build.
-
-Customized from
+This tool is used to create a Docker container image that can build Windows
+multi-arch container images using Google Cloud Build. This tool was forked from
 [cloud-builders-community/windows-builder](https://github.com/GoogleCloudPlatform/cloud-builders-community/tree/master/windows-builder).
 
 # Maintaining this builder
@@ -43,7 +41,9 @@ gcloud compute firewall-rules create allow-winrm-ingress --allow=tcp:5986 --dire
 
 ### Build steps
 
-The "official" build is performed using Cloud Build:
+The "official" build uses Google Cloud Build to build the builder tool (a Linux
+Go binary) and install it in a Docker container image that is pushed to Google
+Container Registry. Run this command to invoke Cloud Build:
 
 ```shell
 gcloud builds submit --config=builder/cloudbuild.yaml builder/
@@ -69,9 +69,10 @@ If you visit
 you should now see the `latest` builder image that you just built and pushed.
 
 As part of the Cloud Build process you'll see output showing the `go build` step
-that builds the Go code you may be modifying. To reduce your dev/build cycle
-time, you can copy and modify the command from this step and run it directly
-(from the `builder/` subdir), something like:
+that builds the Go code you may be modifying. To reduce the dev/build cycle time
+when making changes to the builder's Go code, you can copy and adjust the
+command from this step and run it directly (from the `builder/` subdir),
+something like:
 
 ```shell
 GO111MODULE=on CGO_ENABLED=0 go build -o /tmp/go/bin/gke-windows-builder_main
