@@ -302,17 +302,23 @@ func buildSingleArchContainerOnRemote(
 	version string,
 	timeout time.Duration,
 ) error {
+	registry := strings.Split(containerImageName, "/")[0]
+	if registry == "gcr.io" {
+		registry = ""
+	}
 	buildSingleArchContainerScript := fmt.Sprintf(`
 	$env:DOCKER_CLI_EXPERIMENTAL = 'enabled'
-	gcloud --quiet auth configure-docker
+	gcloud auth --quiet configure-docker %[3]s
 	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s .
 	docker push %[1]s_%[2]s
-	`, containerImageName, version)
+	`, containerImageName, version, registry)
 
 	log.Printf("Start to build single-arch container with commands: %s", buildSingleArchContainerScript)
 	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), timeout)
 }
 
+// This function assumes that the remote server has already performed gcloud docker authentication.
+// https://cloud.google.com/artifact-registry/docs/docker/authentication#gcloud-helper
 func createMultiArchContainerOnRemote(
 	r *builder.RemoteWindowsServer,
 	containerImageName string,
@@ -321,7 +327,6 @@ func createMultiArchContainerOnRemote(
 ) error {
 	createMultiarchContainerScript := fmt.Sprintf(`
 	$env:DOCKER_CLI_EXPERIMENTAL = 'enabled'
-	gcloud --quiet auth configure-docker
 	docker manifest create %s
 	docker manifest push %s
 	`, manifestCreateCmdArgs, containerImageName)
