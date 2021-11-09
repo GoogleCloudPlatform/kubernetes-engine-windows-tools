@@ -25,14 +25,16 @@ export MEMBER=$(gcloud projects describe $PROJECT --format 'value(projectNumber)
 # Enable the Cloud Build and Compute APIs on your project:
 gcloud services enable cloudbuild.googleapis.com
 gcloud services enable compute.googleapis.com
+gcloud services enable artifactregistry.googleapis.com
 
 # Assign roles. These roles are required for the builder to create the Windows
-# Server VMs, to copy the workspace to a Cloud Storage bucket and to configure the
-# networks to build the Docker image:
+# Server VMs, to copy the workspace to a Cloud Storage bucket, to configure the
+# networks to build the Docker image and to push resulting image to artifact registry:
 gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$MEMBER --role='roles/compute.instanceAdmin'
 gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$MEMBER --role='roles/iam.serviceAccountUser'
 gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$MEMBER --role='roles/compute.networkViewer'
 gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$MEMBER --role='roles/storage.admin'
+gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$MEMBER --role='roles/artifactregistry.writer'
 
 # Add a firewall rule named allow-winrm-ingress to allow WinRM to connect to
 # Windows Server VMs to run a Docker build:

@@ -14,8 +14,8 @@
 
 timeout: 3600s
 steps:
-  - name: 'gcr.io/$PROJECT_ID/gke-windows-builder'
+  - name: 'us-docker.pkg.dev/$PROJECT_ID/docker-repo/gke-windows-builder'
     args:
     - --container-image-name
-    - 'gcr.io/$PROJECT_ID/windows-multiarch-container-demo:cloudbuild'
+    - 'us-docker.pkg.dev/$PROJECT_ID/docker-repo/windows-multiarch-container-demo:cloudbuild'
 tags: ['cloud-builders-community']
