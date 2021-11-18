@@ -50,6 +50,7 @@ var (
 	pickedVersions      = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
 	testObsoleteVersion = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
 	setupTimeout        = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
+	useInternalIP       = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
 	skipFirewallCheck   = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
 	// Windows version and GCE container image family map
 	// Note:
@@ -110,7 +111,7 @@ func setupProjectForBuilder(ctx context.Context) error {
 		return fmt.Errorf("Failed creating bucket: %v, with error: %+v", *workspaceBucket, err)
 	}
 
-	if *skipFirewallCheck {
+	if *skipFirewallCheck || *useInternalIP {
 		log.Printf("skipping checks that WinRM firewall rules exist")
 		return nil
 	}
@@ -214,6 +215,7 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 		BootDiskType:   bootDiskType,
 		BootDiskSizeGB: *bootDiskSizeGB,
 		ServiceAccount: serviceAccount,
+		UseInternalIP: *useInternalIP,
 	}
 	s, err := builder.NewServer(ctx, bsc, *projectID)
 	if err != nil {

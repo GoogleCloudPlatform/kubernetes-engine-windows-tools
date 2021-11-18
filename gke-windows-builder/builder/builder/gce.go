@@ -162,9 +162,9 @@ func NewServer(ctx context.Context, bs *WindowsBuildServerConfig, projectID stri
 		return nil, err
 	}
 	// Get IP address.
-	ip, err := s.getExternalIP()
+	ip, err := s.getIP(bs.UseInternalIP)
 	if err != nil {
-		log.Printf("Failed to get external IP address: %+v", err)
+		log.Printf("Failed to get IP address: %+v", err)
 		s.DeleteInstance()
 		return nil, err
 	}
@@ -304,13 +304,16 @@ func (s *Server) DeleteInstance() {
 	log.Printf("Instance: %s shut down successfully", *s.RemoteWindowsServer.Hostname)
 }
 
-// getExternalIP gets the external IP for an instance.
-func (s *Server) getExternalIP() (string, error) {
+// getIP gets the IP for an instance (external or internal if using shared VPCs).
+func (s *Server) getIP(useInternalIP bool) (string, error) {
 	err := s.refreshInstance()
 	if err != nil {
 		log.Printf("Error refreshing instance: %+v", err)
 	}
 	for _, ni := range s.instance.NetworkInterfaces {
+		if useInternalIP {
+			return ni.NetworkIP, nil
+		}
 		for _, ac := range ni.AccessConfigs {
 			if ac.Name == "External NAT" {
 				return ac.NatIP, nil
