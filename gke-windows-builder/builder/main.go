@@ -17,7 +17,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	"gke-windows-builder/builder/builder"
 
 	"github.com/masterzen/winrm"
+	flag "github.com/spf13/pflag"
 	"google.golang.org/api/googleapi"
 )
 
@@ -52,6 +52,7 @@ var (
 	setupTimeout        = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
 	useInternalIP       = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
 	skipFirewallCheck   = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
+	buildArgs           = flag.StringSlice("build-arg", []string{}, "The list of parameters to pass to the docker build command")
 	// Windows version and GCE container image family map
 	// Note:
 	// 1. Mapping between version <-> image family name, NOT specific image name
@@ -215,7 +216,7 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 		BootDiskType:   bootDiskType,
 		BootDiskSizeGB: *bootDiskSizeGB,
 		ServiceAccount: serviceAccount,
-		UseInternalIP: *useInternalIP,
+		UseInternalIP:  *useInternalIP,
 	}
 	s, err := builder.NewServer(ctx, bsc, *projectID)
 	if err != nil {
@@ -308,12 +309,16 @@ func buildSingleArchContainerOnRemote(
 	if registry == "gcr.io" {
 		registry = ""
 	}
+	buildargs := ""
+	for _, arg := range *buildArgs {
+		buildargs += "--build-arg " + arg
+	}
 	buildSingleArchContainerScript := fmt.Sprintf(`
 	$env:DOCKER_CLI_EXPERIMENTAL = 'enabled'
 	gcloud auth --quiet configure-docker %[3]s
-	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s .
+	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s %[4]s .
 	docker push %[1]s_%[2]s
-	`, containerImageName, version, registry)
+	`, containerImageName, version, registry, buildargs)
 
 	log.Printf("Start to build single-arch container with commands: %s", buildSingleArchContainerScript)
 	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), timeout)
