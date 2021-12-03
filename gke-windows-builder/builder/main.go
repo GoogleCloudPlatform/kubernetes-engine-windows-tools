@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"strings"
@@ -26,7 +27,6 @@ import (
 	"gke-windows-builder/builder/builder"
 
 	"github.com/masterzen/winrm"
-	flag "github.com/spf13/pflag"
 	"google.golang.org/api/googleapi"
 )
 
@@ -52,7 +52,6 @@ var (
 	setupTimeout        = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
 	useInternalIP       = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
 	skipFirewallCheck   = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
-	buildArgs           = flag.StringSlice("build-arg", []string{}, "The list of parameters to pass to the docker build command")
 	// Windows version and GCE container image family map
 	// Note:
 	// 1. Mapping between version <-> image family name, NOT specific image name
@@ -65,6 +64,19 @@ var (
 	commandTimeout = 10 * time.Minute
 )
 
+type buildArgsArray []string
+
+var buildArgs buildArgsArray
+
+func (i *buildArgsArray) String() string {
+	return "my string representation"
+}
+
+func (i *buildArgsArray) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 // builderServerStatus contains builder server and associated error.
 type builderServerStatus struct {
 	s   *builder.Server
@@ -73,6 +85,7 @@ type builderServerStatus struct {
 
 func main() {
 	log.Print("Starting Windows multi-arch container builder")
+	flag.Var(&buildArgs, "build-arg", "The list of parameters to pass to the docker build command")
 	flag.Parse()
 	if *containerImageName == "" {
 		log.Fatalf("Error container-image-name flag is required but was not set")
@@ -310,8 +323,8 @@ func buildSingleArchContainerOnRemote(
 		registry = ""
 	}
 	buildargs := ""
-	for _, arg := range *buildArgs {
-		buildargs += "--build-arg " + arg
+	for _, arg := range buildArgs {
+		buildargs += "--build-arg " + arg + " "
 	}
 	buildSingleArchContainerScript := fmt.Sprintf(`
 	$env:DOCKER_CLI_EXPERIMENTAL = 'enabled'
