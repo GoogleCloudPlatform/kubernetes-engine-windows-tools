@@ -64,6 +64,19 @@ var (
 	commandTimeout = 10 * time.Minute
 )
 
+type buildArgsArray []string
+
+var buildArgs buildArgsArray
+
+func (i *buildArgsArray) String() string {
+	return "my string representation"
+}
+
+func (i *buildArgsArray) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 // builderServerStatus contains builder server and associated error.
 type builderServerStatus struct {
 	s   *builder.Server
@@ -72,6 +85,7 @@ type builderServerStatus struct {
 
 func main() {
 	log.Print("Starting Windows multi-arch container builder")
+	flag.Var(&buildArgs, "build-arg", "The list of parameters to pass to the docker build command")
 	flag.Parse()
 	if *containerImageName == "" {
 		log.Fatalf("Error container-image-name flag is required but was not set")
@@ -215,7 +229,7 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 		BootDiskType:   bootDiskType,
 		BootDiskSizeGB: *bootDiskSizeGB,
 		ServiceAccount: serviceAccount,
-		UseInternalIP: *useInternalIP,
+		UseInternalIP:  *useInternalIP,
 	}
 	s, err := builder.NewServer(ctx, bsc, *projectID)
 	if err != nil {
@@ -308,12 +322,16 @@ func buildSingleArchContainerOnRemote(
 	if registry == "gcr.io" {
 		registry = ""
 	}
+	buildargs := ""
+	for _, arg := range buildArgs {
+		buildargs += "--build-arg " + arg + " "
+	}
 	buildSingleArchContainerScript := fmt.Sprintf(`
 	$env:DOCKER_CLI_EXPERIMENTAL = 'enabled'
 	gcloud auth --quiet configure-docker %[3]s
-	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s .
+	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s %[4]s .
 	docker push %[1]s_%[2]s
-	`, containerImageName, version, registry)
+	`, containerImageName, version, registry, buildargs)
 
 	log.Printf("Start to build single-arch container with commands: %s", buildSingleArchContainerScript)
 	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), timeout)
