@@ -215,7 +215,7 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		},
 	}
 
-	if bs.UseInternalIP {
+	if !bs.ExternalNAT {
 		accessConfigs = nil
 	}
 

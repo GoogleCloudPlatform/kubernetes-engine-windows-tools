@@ -47,6 +47,7 @@ type WindowsBuildServerConfig struct {
 	BootDiskType   *string
 	BootDiskSizeGB int64
 	UseInternalIP  bool
+	ExternalNAT    bool
 }
 
 // Wait for server to be available for Winrm connection and Docker setup.
