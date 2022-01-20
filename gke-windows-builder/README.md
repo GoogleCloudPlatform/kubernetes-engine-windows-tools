@@ -41,6 +41,10 @@ gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$MEMBER 
 gcloud compute firewall-rules create allow-winrm-ingress --allow=tcp:5986 --direction=INGRESS
 ```
 
+### One-time setup if you want to use internal IP only VMs
+
+Please enable Cloud NAT in your project and create a worker pool with VPC peering to the subnet in which the windows builders will run
+
 ### Build steps
 
 The "official" build uses Google Cloud Build to build the builder tool (a Linux
