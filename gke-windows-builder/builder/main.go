@@ -51,7 +51,7 @@ var (
 	testObsoleteVersion = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
 	setupTimeout        = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
 	useInternalIP       = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
-	ExternalIP          = flag.Bool("external-ip", true, "Create external IP addresses for VMs, please note that if a builder needs to download a base image from outside of gcr Cloud NAT will have to be enabled")
+	ExternalIP          = flag.Bool("external-ip", true, "Create external IP addresses for VMs, If false then Cloud NAT must be enabled, see README for details.")
 	skipFirewallCheck   = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
 	// Windows version and GCE container image family map
 	// Note:
