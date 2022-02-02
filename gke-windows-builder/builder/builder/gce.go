@@ -208,6 +208,17 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		machineType = "e2-standard-2"
 	}
 
+	accessConfigs := []*compute.AccessConfig{
+		{
+			Type: "ONE_TO_ONE_NAT",
+			Name: "External NAT",
+		},
+	}
+
+	if !bs.ExternalNAT {
+		accessConfigs = nil
+	}
+
 	// https://cloud.google.com/compute/docs/reference/rest/v1/instances#resource:-instance
 	instance := &compute.Instance{
 		Name:        name,
@@ -235,12 +246,7 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		},
 		NetworkInterfaces: []*compute.NetworkInterface{
 			&compute.NetworkInterface{
-				AccessConfigs: []*compute.AccessConfig{
-					&compute.AccessConfig{
-						Type: "ONE_TO_ONE_NAT",
-						Name: "External NAT",
-					},
-				},
+				AccessConfigs: accessConfigs,
 			},
 		},
 		ServiceAccounts: []*compute.ServiceAccount{
