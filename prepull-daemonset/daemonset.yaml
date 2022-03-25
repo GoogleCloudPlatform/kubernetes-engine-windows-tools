@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pre-pull
+  labels:
+    app: pre-pull
+spec:
+  selector:
+    matchLabels:
+      app: pre-pull
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: pre-pull
+    spec:
+      initContainers:
+      - name: pre-pull-large-images
+        image: mcr.microsoft.com/windows/nanoserver:1809
+        securityContext:
+          windowsOptions:
+            runAsUserName: "ContainerAdministrator"
+        command:
+        - cmd
+        - /c
+        args:
+        - echo tools\crictl --debug pull %1 > pull.cmd &&
+          pull gcr.io/my-registry/image-1:tag1 &&
+          pull gcr.io/my-registry/image-2@sha256:some-digest
+        volumeMounts:
+        - name: container-runtime-tools
+          mountPath: "\\tools"
+          readOnly: true
+        - name: dockershim-pipe
+          mountPath: \\.\pipe\dockershim
+        - name: containerd-pipe
+          mountPath: \\.\pipe\containerd
+      containers:
+      - name: no-op
+        image: gcr.io/gke-release/pause-win:1.6.1
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      nodeSelector:
+        kubernetes.io/os: windows
+      volumes:
+      - name: container-runtime-tools
+        hostPath:
+         path: "\\etc\\kubernetes\\node\\bin"
+      - name: dockershim-pipe
+        hostPath:
+          path: \\.\pipe\dockershim
+          type: ""
+      - name: containerd-pipe
+        hostPath:
+          path: \\.\pipe\containerd-containerd
+          type: ""
