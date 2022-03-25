@@ -5,24 +5,28 @@ The daemonset can be used to pre-pull large images to [Windows node pools on GKE
 # Configuring the daemonset
 
 A list of desired images that is required to be pre-pulled on every Windows node can be specified in [daemonset.yaml](daemonset.yaml):
-```          pull gcr.io/my-registry/image-1:tag1 &&
+```
+          pull gcr.io/my-registry/image-1:tag1 &&
           pull gcr.io/my-registry/image-2@sha256:some-digest
 ```
 
-The daemonset initContainer uses a [nanoserver image](https://hub.docker.com/_/microsoft-windows-nanoserver) to run. :1809 tag supoorts Windows Server LTSC (2019). Please adjust to the prober LTSC or SAC tag as needed:
-```      - name: pre-pull-large-images
+The daemonset initContainer uses a [nanoserver image](https://hub.docker.com/_/microsoft-windows-nanoserver) to run. :1809 tag supoorts Windows Server LTSC (2019). Please adjust to the proper LTSC or SAC tag as needed:
+```
+      - name: pre-pull-large-images
         image: mcr.microsoft.com/windows/nanoserver:1809
 ```
 
 # Installation through CLI
 
-```$ kubectl create -f daemonset.yaml
+```
+$ kubectl create -f daemonset.yaml
 ```
 
 # Checking logs
 
 The logs from the daemonset pods shows the output from [crictl](https://github.com/kubernetes-sigs/cri-tools/blob/master/docs/crictl.md) tool used to pre-pull, as an example:
-```$ kubectl logs pre-pull-rl2d7 -c pre-pull-large-images
+```
+$ kubectl logs pre-pull-rl2d7 -c pre-pull-large-images
 
 C:\>tools\crictl --debug pull <some-image-path>   
 time="2022-03-25T18:07:58Z" level=debug msg="get image connection"
