@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+data:
+  pull.cmd: |
+    ping 10.0.0.0 -n 1 -w 20000
+    set metadata_ep=http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+    set header=^"Metadata-Flavor: Google^"
+    for /f 'delims^=^"^ tokens^=4' %%i in ('curl -H %%header%% %%metadata_ep%%') do (set sa_token=%%i)
+    tools\crictl --debug pull --creds "oauth2accesstoken:%sa_token%" %1
+metadata:
+  name: pull-image
+  namespace: default

@@ -25,9 +25,8 @@ spec:
         - cmd
         - /c
         args:
-        - echo tools\crictl --debug pull %1 > pull.cmd &&
-          pull gcr.io/my-registry/image-1:tag1 &&
-          pull gcr.io/my-registry/image-2@sha256:some-digest
+        - cmd\pull gcr.io/my-registry/image-1:tag1 &&
+          cmd\pull gcr.io/my-registry/image-2@sha256:some-digest
         volumeMounts:
         - name: container-runtime-tools
           mountPath: "\\tools"
@@ -36,6 +35,8 @@ spec:
           mountPath: \\.\pipe\dockershim
         - name: containerd-pipe
           mountPath: \\.\pipe\containerd
+        - name: pull-image-volume
+          mountPath: "\\cmd"
       containers:
       - name: no-op
         image: gcr.io/gke-release/pause-win:1.6.1
@@ -47,6 +48,12 @@ spec:
       nodeSelector:
         kubernetes.io/os: windows
       volumes:
+      - name: pull-image-volume
+        configMap:
+          name: pull-image
+          items:
+          - key: pull.cmd
+            path: pull.cmd
       - name: container-runtime-tools
         hostPath:
          path: "\\etc\\kubernetes\\node\\bin"
