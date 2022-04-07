@@ -1,13 +1,13 @@
 # Description
 
-The daemonset can be used to pre-pull large images to [Windows node pools on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/creating-a-cluster-windows). The daemonset supports both Docker and Containerd node pools.
+The daemonset can be used to pre-pull large images to [Windows node pools on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/creating-a-cluster-windows). The daemonset supports both Docker and Containerd node pools. Private images on gcr will be accessible if the daemon is running from within the same project, or if proper IAM access is set. 
 
 # Configuring the daemonset
 
 A list of desired images that is required to be pre-pulled on every Windows node can be specified in [daemonset.yaml](daemonset.yaml):
 ```
-          pull gcr.io/my-registry/image-1:tag1 &&
-          pull gcr.io/my-registry/image-2@sha256:some-digest
+          cmd\pull gcr.io/my-registry/image-1:tag1 &&
+          cmd\pull gcr.io/my-registry/image-2@sha256:some-digest
 ```
 
 The daemonset initContainer uses a [nanoserver image](https://hub.docker.com/_/microsoft-windows-nanoserver) to run. :1809 tag supoorts Windows Server LTSC (2019). Please adjust to the proper LTSC or SAC tag as needed:
@@ -19,6 +19,7 @@ The daemonset initContainer uses a [nanoserver image](https://hub.docker.com/_/m
 # Installation through CLI
 
 ```
+$ kubectl create -f pull-image-configmap.yaml
 $ kubectl create -f daemonset.yaml
 ```
 

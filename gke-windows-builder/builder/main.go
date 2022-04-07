@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -48,6 +49,9 @@ var (
 	serviceAccount      = flag.String("serviceAccount", "default", "The service account to use when creating the Windows Instance")
 	containerImageName  = flag.String("container-image-name", "", "The target container image:tag name")
 	pickedVersions      = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
+	existingInstances   = flag.String("existing-instances", "", "Mapping (version -> instance-name) of existing GCE instances to use")
+	keepInstances       = flag.Bool("keep-instances", false, "Do not delete the generated GCE instances in the end of the build")
+	instanceNamePrefix  = flag.String("instance-name-prefix", "windows-builder-", "Prefix to use for created GCE instances. Defaults to 'windows-builder-'")
 	testObsoleteVersion = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
 	setupTimeout        = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
 	useInternalIP       = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
@@ -202,6 +206,12 @@ func buildMultiArchContainer(pickedVersionMap map[string]string, bss []builderSe
 }
 
 func shutdownBuildServers(bss []builderServerStatus) {
+	if *keepInstances || existingInstances != nil && len(*existingInstances) > 0 {
+		log.Printf("Keeping created instance")
+		return
+	}
+
+	log.Printf("Deleting created instances")
 	wg := sync.WaitGroup{}
 	for _, bsc := range bss {
 		if bsc.s != nil {
@@ -220,30 +230,39 @@ func shutdownBuildServers(bss []builderServerStatus) {
 // If err is non-nil, then the server has been stopped.
 // So please be aware of cleaning up the running instances after calling this function.
 func buildSingleArchContainer(ctx context.Context, ver string, imageFamily string) builderServerStatus {
-	netConfig := builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, subnetworkProject, region)
-	bsc := &builder.WindowsBuildServerConfig{
-		ImageURL:       &imageFamily,
-		Zone:           zone,
-		NetworkConfig:  netConfig,
-		Labels:         labels,
-		MachineType:    machineType,
-		BootDiskType:   bootDiskType,
-		BootDiskSizeGB: *bootDiskSizeGB,
-		ServiceAccount: serviceAccount,
-		UseInternalIP:  *useInternalIP,
-		ExternalNAT:    *ExternalIP,
-	}
-	s, err := builder.NewServer(ctx, bsc, *projectID)
-	if err != nil {
-		if isImageNotFoundErr(err, imageFamily) {
-			log.Printf("Failed to create Windows %[1]s instance, it may be expired, so skip it to continue without stamping Windows %[1]s manifest", ver)
-			return builderServerStatus{nil, nil}
+	var s *builder.Server
+	var err error
+	var existingInstance = getExistingInstanceName(ver)
+	if existingInstance != nil {
+		s, _ = builder.ExistingServer(ctx, *zone, *projectID, *existingInstance, *useInternalIP)
+	} else {
+		netConfig := builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, subnetworkProject, region)
+		bsc := &builder.WindowsBuildServerConfig{
+			InstanceNamePrefix: instanceNamePrefix,
+			ImageURL:           &imageFamily,
+			Zone:               zone,
+			NetworkConfig:      netConfig,
+			Labels:             labels,
+			MachineType:        machineType,
+			BootDiskType:       bootDiskType,
+			BootDiskSizeGB:     *bootDiskSizeGB,
+			ServiceAccount:     serviceAccount,
+			UseInternalIP:      *useInternalIP,
+			ExternalNAT:        *ExternalIP,
 		}
-		return builderServerStatus{nil, err}
+		s, err = builder.NewServer(ctx, bsc, *projectID)
+		if err != nil {
+			if isImageNotFoundErr(err, imageFamily) {
+				log.Printf("Failed to create Windows %[1]s instance, it may be expired, so skip it to continue without stamping Windows %[1]s manifest", ver)
+				return builderServerStatus{nil, nil}
+			}
+			return builderServerStatus{nil, err}
+		}
 	}
+
 	r := &s.RemoteWindowsServer
 
-	log.Printf("Waiting for Windows %s instance: %s to become available", ver, *r.Hostname)
+	log.Printf("Waiting for Windows %s instance: %s (%s) to become available", ver, *r.Hostname, s.GetInstanceName())
 	err = r.WaitForServerBeReady(*setupTimeout)
 	if err != nil {
 		log.Printf("Error setup Windows %s instance: %s with error: %+v", ver, *r.Hostname, err)
@@ -355,4 +374,20 @@ func createMultiArchContainerOnRemote(
 
 	log.Printf("Start to create multi-arch container with commands: %s", createMultiarchContainerScript)
 	return r.RunCommand(winrm.Powershell(createMultiarchContainerScript), timeout)
+}
+
+func getExistingInstanceName(version string) *string {
+	if existingInstances == nil && len(*existingInstances) == 0 {
+		return nil
+	}
+
+	existingInstancesMap := map[string]string{}
+	json.Unmarshal([]byte(*existingInstances), &existingInstancesMap)
+
+	val, ok := existingInstancesMap[version]
+	if !ok {
+		return nil
+	}
+
+	return &val
 }
