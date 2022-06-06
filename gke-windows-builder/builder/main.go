@@ -208,6 +208,17 @@ func buildMultiArchContainer(pickedVersionMap map[string]string, bss []builderSe
 func shutdownBuildServers(bss []builderServerStatus) {
 	if *keepInstances || existingInstances != nil && len(*existingInstances) > 0 {
 		log.Printf("Keeping created instance")
+		wg := sync.WaitGroup{}
+		for _, bsc := range bss {
+			if bsc.s != nil {
+				wg.Add(1)
+				go func(bsc builderServerStatus) {
+					defer wg.Done()
+					bsc.s.RemoteWindowsServer.CleanFolder()
+				}(bsc)
+			}
+		}
+		wg.Wait()
 		return
 	}
 
@@ -355,7 +366,7 @@ func buildSingleArchContainerOnRemote(
 	`, containerImageName, version, registry, buildargs)
 
 	log.Printf("Start to build single-arch container with commands: %s", buildSingleArchContainerScript)
-	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), timeout)
+	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), *r.WorkspaceFolder, timeout)
 }
 
 // This function assumes that the remote server has already performed gcloud docker authentication.
@@ -373,7 +384,7 @@ func createMultiArchContainerOnRemote(
 	`, manifestCreateCmdArgs, containerImageName)
 
 	log.Printf("Start to create multi-arch container with commands: %s", createMultiarchContainerScript)
-	return r.RunCommand(winrm.Powershell(createMultiarchContainerScript), timeout)
+	return r.RunCommand(winrm.Powershell(createMultiarchContainerScript), *r.WorkspaceFolder, timeout)
 }
 
 func getExistingInstanceName(version string) *string {

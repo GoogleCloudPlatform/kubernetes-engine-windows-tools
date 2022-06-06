@@ -346,11 +346,14 @@ func (s *Server) resetPasswordAndPopulateRemoteServer(useInternalIP bool) error 
 		return err
 	}
 
+	workspaceFolder := fmt.Sprintf(`C:\ws-%s`, uuid.New())
+
 	// Set and return Remote.
 	s.RemoteWindowsServer = RemoteWindowsServer{
-		Hostname: &ip,
-		Username: &username,
-		Password: &password,
+		Hostname:        &ip,
+		Username:        &username,
+		Password:        &password,
+		WorkspaceFolder: &workspaceFolder,
 	}
 
 	return nil
