@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	random "math/rand"
 	"os/exec"
 	"strings"
 	"time"
@@ -160,7 +161,7 @@ func NewServer(ctx context.Context, bs *WindowsBuildServerConfig, projectID stri
 	return s, nil
 }
 
-func ExistingServer(ctx context.Context, zone string, projectID string, name string, useInternalIP bool) (*Server, error) {
+func existingServer(ctx context.Context, zone string, projectID string, name string, useInternalIP bool) (*Server, error) {
 	s := &Server{projectID: projectID, zone: zone}
 	var err error
 	if err = s.newGCEService(ctx); err != nil {
@@ -178,6 +179,51 @@ func ExistingServer(ctx context.Context, zone string, projectID string, name str
 	}
 
 	return s, nil
+}
+
+func FindExistingInstance(ctx context.Context, bs *WindowsBuildServerConfig, projectID string) (*Server, error) {
+	s := &Server{projectID: projectID, zone: *bs.Zone}
+	var err error
+	if err = s.newGCEService(ctx); err != nil {
+		log.Printf("Failed to start GCE service to create servers: %+v", err)
+		return nil, err
+	}
+
+	instanceList, err := s.service.Instances.
+		List(projectID, *bs.Zone).
+		Filter(buildListInstancesFilter(bs.GetLabelsMap(), bs.InstanceNamePrefix)).
+		Do()
+
+	if err != nil {
+		log.Printf("Failed to list relevant instances: %v", err)
+		return nil, err
+	}
+
+	if len(instanceList.Items) == 0 {
+		log.Printf("Found no relevant instances")
+		return nil, nil
+	}
+
+	random.Seed(time.Now().Unix())
+	chosenInstance := instanceList.Items[random.Intn(len(instanceList.Items))]
+
+	log.Printf("Found %d relevant instances for version: %s, chose %s", len(instanceList.Items), *bs.ImageVersion, chosenInstance.Name)
+
+	return existingServer(ctx, *bs.Zone, projectID, chosenInstance.Name, bs.UseInternalIP)
+}
+
+func buildListInstancesFilter(labels map[string]string, instanceNamePrefix *string) string {
+	filters := []string{"(status eq RUNNING)"}
+
+	if instanceNamePrefix != nil {
+		filters = append(filters, fmt.Sprintf("(name eq %s.*)", *instanceNamePrefix))
+	}
+
+	for labelKey, value := range labels {
+		filters = append(filters, fmt.Sprintf("(labels.%s eq %s)", labelKey, value))
+	}
+
+	return strings.Join(filters, " ")
 }
 
 func newGCEService(ctx context.Context) (*compute.Service, error) {
@@ -287,7 +333,7 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		log.Printf("Could not get GCE Instance details after creation: %v", err)
 		return err
 	}
-	log.Printf("Successfully created instance: %s", inst.Name)
+	log.Printf("Successfully created instance: %s, version: %s", inst.Name, *bs.ImageVersion)
 	s.instance = inst
 	return nil
 }

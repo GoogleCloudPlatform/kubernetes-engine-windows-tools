@@ -40,6 +40,7 @@ type RemoteWindowsServer struct {
 // WindowsBuildServerConfig stores the configs of windows build server.
 type WindowsBuildServerConfig struct {
 	InstanceNamePrefix *string
+	ImageVersion       *string
 	ImageURL           *string
 	Zone               *string
 	NetworkConfig      *InstanceNetworkConfig
@@ -198,11 +199,11 @@ func (bs *WindowsBuildServerConfig) GetServiceAccountEmail(projectID string) str
 }
 
 func (bs *WindowsBuildServerConfig) GetLabelsMap() map[string]string {
-	if *bs.Labels == "" {
-		return nil
-	}
+	var labelsMap = map[string]string{"builder_version": strings.ToLower(*bs.ImageVersion)}
 
-	var labelsMap map[string]string
+	if *bs.Labels == "" {
+		return labelsMap
+	}
 
 	for _, label := range strings.Split(*bs.Labels, ",") {
 		labelSpl := strings.Split(label, "=")
@@ -218,9 +219,6 @@ func (bs *WindowsBuildServerConfig) GetLabelsMap() map[string]string {
 		}
 		var value = strings.TrimSpace(labelSpl[1])
 
-		if labelsMap == nil {
-			labelsMap = make(map[string]string)
-		}
 		labelsMap[key] = value
 	}
 	return labelsMap
