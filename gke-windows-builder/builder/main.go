@@ -259,6 +259,7 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 	}
 
 	if reuseBuilderInstances != nil {
+		log.Printf("Looking for an exiting %s instance to reuse", ver)
 		s, err = builder.FindExistingInstance(ctx, bsc, *projectID)
 	}
 
