@@ -51,6 +51,7 @@ type WindowsBuildServerConfig struct {
 	BootDiskSizeGB     int64
 	UseInternalIP      bool
 	ExternalNAT        bool
+	ReuseInstance      bool
 }
 
 // Wait for server to be available for Winrm connection and Docker setup.
@@ -199,7 +200,11 @@ func (bs *WindowsBuildServerConfig) GetServiceAccountEmail(projectID string) str
 }
 
 func (bs *WindowsBuildServerConfig) GetLabelsMap() map[string]string {
-	var labelsMap = map[string]string{"builder_version": strings.ToLower(*bs.ImageVersion)}
+	var labelsMap = map[string]string{}
+
+	if bs.ReuseInstance {
+		labelsMap["builder_version"] = strings.ToLower(*bs.ImageVersion)
+	}
 
 	if *bs.Labels == "" {
 		return labelsMap

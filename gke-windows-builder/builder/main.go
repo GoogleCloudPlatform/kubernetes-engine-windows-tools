@@ -48,7 +48,7 @@ var (
 	serviceAccount        = flag.String("serviceAccount", "default", "The service account to use when creating the Windows Instance")
 	containerImageName    = flag.String("container-image-name", "", "The target container image:tag name")
 	pickedVersions        = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
-	reuseBuilderInstances = flag.Bool("reuse-builder-instances", false, "Look for existing instances by labels and instance-name-prefix and reuse them for build. Create new instance only if none were found")
+	reuseBuilderInstances = flag.Bool("reuse-builder-instances", false, "Look for existing instances by labels and instance-name-prefix and reuse them for build, create new instance only if none were found. Avoid when queuing parallel builds.")
 	instanceNamePrefix    = flag.String("instance-name-prefix", "windows-builder-", "Prefix to use for created GCE instances. Defaults to 'windows-builder-'")
 	testObsoleteVersion   = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
 	setupTimeout          = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
@@ -256,6 +256,7 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 		ServiceAccount:     serviceAccount,
 		UseInternalIP:      *useInternalIP,
 		ExternalNAT:        *ExternalIP,
+		ReuseInstance:      *reuseBuilderInstances,
 	}
 
 	if reuseBuilderInstances != nil {
