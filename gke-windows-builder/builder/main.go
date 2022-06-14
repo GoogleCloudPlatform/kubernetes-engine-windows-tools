@@ -31,28 +31,30 @@ import (
 )
 
 var (
-	projectID           = flag.String("project", "", "The project Id to use when creating the Windows Instance (uses gcloud default if not specified)")
-	workspacePath       = flag.String("workspace-path", "/workspace", "The directory to copy data from")
-	workspaceBucket     = flag.String("workspace-bucket", "", "The bucket to copy the directory to. Defaults to {project-id}_builder_tmp")
-	network             = flag.String("network", "default", "The VPC network to use when creating the Windows Instance (uses 'default' if not specified)")
-	networkProject      = flag.String("network-project", "", "The project where the VPC network is located (inferred if not specified).")
-	subnetwork          = flag.String("subnetwork", "default", "The Subnetwork name to use when creating the Windows Instance")
-	subnetworkProject   = flag.String("subnetwork-project", "", "The project where the Subnetwork is located (uses --network-project if not specified)")
-	region              = flag.String("region", "us-central1", "The region to create the Windows Instance in (where the Subnetwork is located)")
-	zone                = flag.String("zone", "us-central1-f", "The zone name to use when creating the Windows Instance")
-	labels              = flag.String("labels", "", "List of label KEY=VALUE pairs separated by comma to add when creating the Windows Instance")
-	machineType         = flag.String("machineType", "", "The machine type to use when creating the Windows Instance")
-	bootDiskType        = flag.String("boot-disk-type", "pd-standard", "Windows instance boot disk type. Default value is pd-standard, other values include pd-ssd and pd-balanced")
-	bootDiskSizeGB      = flag.Int64("boot-disk-size-GB", 75, "Instance boot disk size (in GB). Must be at least 40 GB")
-	copyTimeout         = flag.Duration("copy-timeout", 5*time.Minute, "The workspace copy timeout in minutes")
-	serviceAccount      = flag.String("serviceAccount", "default", "The service account to use when creating the Windows Instance")
-	containerImageName  = flag.String("container-image-name", "", "The target container image:tag name")
-	pickedVersions      = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
-	testObsoleteVersion = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
-	setupTimeout        = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
-	useInternalIP       = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
-	ExternalIP          = flag.Bool("external-ip", true, "Create external IP addresses for VMs, If false then Cloud NAT must be enabled, see README for details.")
-	skipFirewallCheck   = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
+	projectID             = flag.String("project", "", "The project Id to use when creating the Windows Instance (uses gcloud default if not specified)")
+	workspacePath         = flag.String("workspace-path", "/workspace", "The directory to copy data from")
+	workspaceBucket       = flag.String("workspace-bucket", "", "The bucket to copy the directory to. Defaults to {project-id}_builder_tmp")
+	network               = flag.String("network", "default", "The VPC network to use when creating the Windows Instance (uses 'default' if not specified)")
+	networkProject        = flag.String("network-project", "", "The project where the VPC network is located (inferred if not specified).")
+	subnetwork            = flag.String("subnetwork", "default", "The Subnetwork name to use when creating the Windows Instance")
+	subnetworkProject     = flag.String("subnetwork-project", "", "The project where the Subnetwork is located (uses --network-project if not specified)")
+	region                = flag.String("region", "us-central1", "The region to create the Windows Instance in (where the Subnetwork is located)")
+	zone                  = flag.String("zone", "us-central1-f", "The zone name to use when creating the Windows Instance")
+	labels                = flag.String("labels", "", "List of label KEY=VALUE pairs separated by comma to add when creating the Windows Instance")
+	machineType           = flag.String("machineType", "", "The machine type to use when creating the Windows Instance")
+	bootDiskType          = flag.String("boot-disk-type", "pd-standard", "Windows instance boot disk type. Default value is pd-standard, other values include pd-ssd and pd-balanced")
+	bootDiskSizeGB        = flag.Int64("boot-disk-size-GB", 75, "Instance boot disk size (in GB). Must be at least 40 GB")
+	copyTimeout           = flag.Duration("copy-timeout", 5*time.Minute, "The workspace copy timeout in minutes")
+	serviceAccount        = flag.String("serviceAccount", "default", "The service account to use when creating the Windows Instance")
+	containerImageName    = flag.String("container-image-name", "", "The target container image:tag name")
+	pickedVersions        = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
+	reuseBuilderInstances = flag.Bool("reuse-builder-instances", false, "Look for existing instances by labels and instance-name-prefix and reuse them for build, create new instance only if none were found. Avoid when queuing parallel builds.")
+	instanceNamePrefix    = flag.String("instance-name-prefix", "windows-builder-", "Prefix to use for created GCE instances. Defaults to 'windows-builder-'")
+	testObsoleteVersion   = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
+	setupTimeout          = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
+	useInternalIP         = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
+	ExternalIP            = flag.Bool("external-ip", true, "Create external IP addresses for VMs, If false then Cloud NAT must be enabled, see README for details.")
+	skipFirewallCheck     = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
 	// Windows version and GCE container image family map
 	// Note:
 	// 1. Mapping between version <-> image family name, NOT specific image name
@@ -202,6 +204,23 @@ func buildMultiArchContainer(pickedVersionMap map[string]string, bss []builderSe
 }
 
 func shutdownBuildServers(bss []builderServerStatus) {
+	if *reuseBuilderInstances {
+		log.Printf("Keeping instances for reuse")
+		wg := sync.WaitGroup{}
+		for _, bsc := range bss {
+			if bsc.s != nil {
+				wg.Add(1)
+				go func(bsc builderServerStatus) {
+					defer wg.Done()
+					bsc.s.RemoteWindowsServer.CleanFolder()
+				}(bsc)
+			}
+		}
+		wg.Wait()
+		return
+	}
+
+	log.Printf("Deleting created instances")
 	wg := sync.WaitGroup{}
 	for _, bsc := range bss {
 		if bsc.s != nil {
@@ -220,30 +239,45 @@ func shutdownBuildServers(bss []builderServerStatus) {
 // If err is non-nil, then the server has been stopped.
 // So please be aware of cleaning up the running instances after calling this function.
 func buildSingleArchContainer(ctx context.Context, ver string, imageFamily string) builderServerStatus {
+	var s *builder.Server
+	var err error
+
 	netConfig := builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, subnetworkProject, region)
 	bsc := &builder.WindowsBuildServerConfig{
-		ImageURL:       &imageFamily,
-		Zone:           zone,
-		NetworkConfig:  netConfig,
-		Labels:         labels,
-		MachineType:    machineType,
-		BootDiskType:   bootDiskType,
-		BootDiskSizeGB: *bootDiskSizeGB,
-		ServiceAccount: serviceAccount,
-		UseInternalIP:  *useInternalIP,
-		ExternalNAT:    *ExternalIP,
+		InstanceNamePrefix: instanceNamePrefix,
+		ImageVersion:       &ver,
+		ImageURL:           &imageFamily,
+		Zone:               zone,
+		NetworkConfig:      netConfig,
+		Labels:             labels,
+		MachineType:        machineType,
+		BootDiskType:       bootDiskType,
+		BootDiskSizeGB:     *bootDiskSizeGB,
+		ServiceAccount:     serviceAccount,
+		UseInternalIP:      *useInternalIP,
+		ExternalNAT:        *ExternalIP,
+		ReuseInstance:      *reuseBuilderInstances,
 	}
-	s, err := builder.NewServer(ctx, bsc, *projectID)
-	if err != nil {
-		if isImageNotFoundErr(err, imageFamily) {
-			log.Printf("Failed to create Windows %[1]s instance, it may be expired, so skip it to continue without stamping Windows %[1]s manifest", ver)
-			return builderServerStatus{nil, nil}
+
+	if reuseBuilderInstances != nil {
+		log.Printf("Looking for an exiting %s instance to reuse", ver)
+		s, err = builder.FindExistingInstance(ctx, bsc, *projectID)
+	}
+
+	if s == nil {
+		s, err = builder.NewServer(ctx, bsc, *projectID)
+		if err != nil {
+			if isImageNotFoundErr(err, imageFamily) {
+				log.Printf("Failed to create Windows %[1]s instance, it may be expired, so skip it to continue without stamping Windows %[1]s manifest", ver)
+				return builderServerStatus{nil, nil}
+			}
+			return builderServerStatus{nil, err}
 		}
-		return builderServerStatus{nil, err}
 	}
+
 	r := &s.RemoteWindowsServer
 
-	log.Printf("Waiting for Windows %s instance: %s to become available", ver, *r.Hostname)
+	log.Printf("Waiting for Windows %s instance: %s (%s) to become available", ver, *r.Hostname, s.GetInstanceName())
 	err = r.WaitForServerBeReady(*setupTimeout)
 	if err != nil {
 		log.Printf("Error setup Windows %s instance: %s with error: %+v", ver, *r.Hostname, err)
@@ -336,7 +370,7 @@ func buildSingleArchContainerOnRemote(
 	`, containerImageName, version, registry, buildargs)
 
 	log.Printf("Start to build single-arch container with commands: %s", buildSingleArchContainerScript)
-	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), timeout)
+	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), *r.WorkspaceFolder, timeout)
 }
 
 // This function assumes that the remote server has already performed gcloud docker authentication.
@@ -354,5 +388,5 @@ func createMultiArchContainerOnRemote(
 	`, manifestCreateCmdArgs, containerImageName)
 
 	log.Printf("Start to create multi-arch container with commands: %s", createMultiarchContainerScript)
-	return r.RunCommand(winrm.Powershell(createMultiarchContainerScript), timeout)
+	return r.RunCommand(winrm.Powershell(createMultiarchContainerScript), *r.WorkspaceFolder, timeout)
 }

@@ -34,20 +34,24 @@ type RemoteWindowsServer struct {
 	Username        *string
 	Password        *string
 	WorkspaceBucket *string
+	WorkspaceFolder *string
 }
 
 // WindowsBuildServerConfig stores the configs of windows build server.
 type WindowsBuildServerConfig struct {
-	ImageURL       *string
-	Zone           *string
-	NetworkConfig  *InstanceNetworkConfig
-	Labels         *string
-	MachineType    *string
-	ServiceAccount *string
-	BootDiskType   *string
-	BootDiskSizeGB int64
-	UseInternalIP  bool
-	ExternalNAT    bool
+	InstanceNamePrefix *string
+	ImageVersion       *string
+	ImageURL           *string
+	Zone               *string
+	NetworkConfig      *InstanceNetworkConfig
+	Labels             *string
+	MachineType        *string
+	ServiceAccount     *string
+	BootDiskType       *string
+	BootDiskSizeGB     int64
+	UseInternalIP      bool
+	ExternalNAT        bool
+	ReuseInstance      bool
 }
 
 // Wait for server to be available for Winrm connection and Docker setup.
@@ -55,7 +59,7 @@ func (r *RemoteWindowsServer) WaitForServerBeReady(setupTimeout time.Duration) e
 	log.Printf("Waiting at most %+v for WinRM connection and Docker to be available.", setupTimeout)
 	timeout := time.Now().Add(setupTimeout)
 	for time.Now().Before(timeout) {
-		err := r.RunCommand("docker -v", setupTimeout)
+		err := r.RunCommand("docker -v", *r.WorkspaceFolder, setupTimeout)
 		if err == nil {
 			return nil
 		}
@@ -95,18 +99,17 @@ func (r *RemoteWindowsServer) Copy(inputPath string, copyTimeout time.Duration) 
 	err = r.copyViaBucket(
 		context.Background(),
 		inputPath,
-		`C:\workspace`,
 		copyTimeout,
 	)
 	if err == nil {
 		// Successfully copied via GCE bucket
-		log.Printf("Successfully copied data via GCE bucket")
+		log.Printf("Successfully copied data via GCE bucket to %s", *r.WorkspaceFolder)
 		return nil
 	}
 
 	log.Printf("Failed to copy data via GCE bucket: %v", err)
 
-	err = c.Copy(inputPath, `C:\workspace`)
+	err = c.Copy(inputPath, *r.WorkspaceFolder)
 	if err != nil {
 		log.Printf("Error copying workspace to remote: %+v", err)
 		return err
@@ -115,7 +118,20 @@ func (r *RemoteWindowsServer) Copy(inputPath string, copyTimeout time.Duration) 
 	return nil
 }
 
-func (r *RemoteWindowsServer) copyViaBucket(ctx context.Context, inputPath, outputPath string, copyTimeout time.Duration) error {
+func (r *RemoteWindowsServer) CleanFolder() error {
+	log.Printf("Instance: %s cleaning up workspace folder: %s", *r.Hostname, *r.WorkspaceFolder)
+
+	pwrScript := fmt.Sprintf(`
+$ErrorActionPreference = "Stop"
+$ProgressPreference = 'SilentlyContinue'
+Remove-Item -Path %s -Recurse -Force
+`, *r.WorkspaceFolder)
+
+	// Now tell the Windows VM to download it.
+	return r.RunCommand(winrm.Powershell(pwrScript), "C:\\", 30*time.Second)
+}
+
+func (r *RemoteWindowsServer) copyViaBucket(ctx context.Context, inputPath string, copyTimeout time.Duration) error {
 	object := fmt.Sprintf("windows-builder-%d", time.Now().UnixNano())
 
 	gsURL, err := writeZipToBucket(
@@ -131,21 +147,22 @@ func (r *RemoteWindowsServer) copyViaBucket(ctx context.Context, inputPath, outp
 	pwrScript := fmt.Sprintf(`
 $ErrorActionPreference = "Stop"
 $ProgressPreference = 'SilentlyContinue'
-gsutil cp %q c:\workspace.zip
-Expand-Archive -Path c:\workspace.zip -DestinationPath c:\workspace -Force
-`, gsURL)
+gsutil cp %q %s.zip
+Expand-Archive -Path %s.zip -DestinationPath %s -Force
+Remove-Item -Path %s.zip -Force
+`, gsURL, *r.WorkspaceFolder, *r.WorkspaceFolder, *r.WorkspaceFolder, *r.WorkspaceFolder)
 
 	// Now tell the Windows VM to download it.
-	return r.RunCommand(winrm.Powershell(pwrScript), copyTimeout)
+	return r.RunCommand(winrm.Powershell(pwrScript), *r.WorkspaceFolder, copyTimeout)
 }
 
 // Run command against Windows Server thru WinRM within specific timeout
-func (r *RemoteWindowsServer) RunCommand(command string, runTimeout time.Duration) error {
+func (r *RemoteWindowsServer) RunCommand(command string, path string, runTimeout time.Duration) error {
 	if runTimeout <= 0 {
 		return errors.New("runTimeout must be greater than 0")
 	}
 
-	cmdstring := fmt.Sprintf(`cd c:\workspace & %s`, command)
+	cmdstring := fmt.Sprintf(`cd %s & %s`, path, command)
 	endpoint := winrm.NewEndpoint(*r.Hostname, 5986, true, true, nil, nil, nil, runTimeout)
 	w, err := winrm.NewClient(endpoint, *r.Username, *r.Password)
 	if err != nil {
@@ -183,11 +200,15 @@ func (bs *WindowsBuildServerConfig) GetServiceAccountEmail(projectID string) str
 }
 
 func (bs *WindowsBuildServerConfig) GetLabelsMap() map[string]string {
-	if *bs.Labels == "" {
-		return nil
+	var labelsMap = map[string]string{}
+
+	if bs.ReuseInstance {
+		labelsMap["builder_version"] = strings.ToLower(*bs.ImageVersion)
 	}
 
-	var labelsMap map[string]string
+	if *bs.Labels == "" {
+		return labelsMap
+	}
 
 	for _, label := range strings.Split(*bs.Labels, ",") {
 		labelSpl := strings.Split(label, "=")
@@ -203,9 +224,6 @@ func (bs *WindowsBuildServerConfig) GetLabelsMap() map[string]string {
 		}
 		var value = strings.TrimSpace(labelSpl[1])
 
-		if labelsMap == nil {
-			labelsMap = make(map[string]string)
-		}
 		labelsMap[key] = value
 	}
 	return labelsMap

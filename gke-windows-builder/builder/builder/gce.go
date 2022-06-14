@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	random "math/rand"
 	"os/exec"
 	"strings"
 	"time"
@@ -38,8 +39,7 @@ import (
 )
 
 const (
-	instanceNamePrefix = "windows-builder"
-	computeUrlPrefix   = "https://www.googleapis.com/compute/v1/projects/"
+	computeUrlPrefix = "https://www.googleapis.com/compute/v1/projects/"
 )
 
 // Setup the Winrm, disable the Windows Defender, install the docker if needed
@@ -153,29 +153,77 @@ func NewServer(ctx context.Context, bs *WindowsBuildServerConfig, projectID stri
 		log.Printf("Failed to start Windows VM: %+v", err)
 		return nil, err
 	}
-	// Reset password
-	username := "windows-builder"
-	password, err := s.resetWindowsPassword(username)
+	err = s.resetPasswordAndPopulateRemoteServer(bs.UseInternalIP)
 	if err != nil {
-		log.Printf("Failed to reset Windows password: %+v", err)
-		s.DeleteInstance()
-		return nil, err
-	}
-	// Get IP address.
-	ip, err := s.getIP(bs.UseInternalIP)
-	if err != nil {
-		log.Printf("Failed to get IP address: %+v", err)
-		s.DeleteInstance()
 		return nil, err
 	}
 
-	// Set and return Remote.
-	s.RemoteWindowsServer = RemoteWindowsServer{
-		Hostname: &ip,
-		Username: &username,
-		Password: &password,
-	}
 	return s, nil
+}
+
+func existingServer(ctx context.Context, zone string, projectID string, name string, useInternalIP bool) (*Server, error) {
+	s := &Server{projectID: projectID, zone: zone}
+	var err error
+	if err = s.newGCEService(ctx); err != nil {
+		log.Printf("Failed to start GCE service to create servers: %+v", err)
+		return nil, err
+	}
+	if err = s.existingInstance(name); err != nil {
+		log.Printf("Failed to start Windows VM: %+v", err)
+		return nil, err
+	}
+
+	err = s.resetPasswordAndPopulateRemoteServer(useInternalIP)
+	if err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
+
+func FindExistingInstance(ctx context.Context, bs *WindowsBuildServerConfig, projectID string) (*Server, error) {
+	s := &Server{projectID: projectID, zone: *bs.Zone}
+	var err error
+	if err = s.newGCEService(ctx); err != nil {
+		log.Printf("Failed to start GCE service to create servers: %+v", err)
+		return nil, err
+	}
+
+	instanceList, err := s.service.Instances.
+		List(projectID, *bs.Zone).
+		Filter(buildListInstancesFilter(bs.GetLabelsMap(), bs.InstanceNamePrefix)).
+		Do()
+
+	if err != nil {
+		log.Printf("Failed to list relevant instances: %v", err)
+		return nil, err
+	}
+
+	if len(instanceList.Items) == 0 {
+		log.Printf("Found no relevant instances")
+		return nil, nil
+	}
+
+	random.Seed(time.Now().Unix())
+	chosenInstance := instanceList.Items[random.Intn(len(instanceList.Items))]
+
+	log.Printf("Found %d relevant instances for version: %s, chose %s", len(instanceList.Items), *bs.ImageVersion, chosenInstance.Name)
+
+	return existingServer(ctx, *bs.Zone, projectID, chosenInstance.Name, bs.UseInternalIP)
+}
+
+func buildListInstancesFilter(labels map[string]string, instanceNamePrefix *string) string {
+	filters := []string{"(status eq RUNNING)"}
+
+	if instanceNamePrefix != nil {
+		filters = append(filters, fmt.Sprintf("(name eq %s.*)", *instanceNamePrefix))
+	}
+
+	for labelKey, value := range labels {
+		filters = append(filters, fmt.Sprintf("(labels.%s eq %s)", labelKey, value))
+	}
+
+	return strings.Join(filters, " ")
 }
 
 func newGCEService(ctx context.Context) (*compute.Service, error) {
@@ -201,7 +249,7 @@ func (s *Server) newGCEService(ctx context.Context) error {
 
 // newInstance starts a Windows VM on GCE and returns host, username, password.
 func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
-	name := "windows-builder-" + uuid.New()
+	name := *bs.InstanceNamePrefix + uuid.New()
 
 	machineType := *bs.MachineType
 	if machineType == "" {
@@ -285,7 +333,18 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		log.Printf("Could not get GCE Instance details after creation: %v", err)
 		return err
 	}
-	log.Printf("Successfully created instance: %s", inst.Name)
+	log.Printf("Successfully created instance: %s, version: %s", inst.Name, *bs.ImageVersion)
+	s.instance = inst
+	return nil
+}
+
+func (s *Server) existingInstance(name string) error {
+	inst, err := s.service.Instances.Get(s.projectID, s.zone, name).Do()
+	if err != nil {
+		log.Printf("Could not get provided existing GCE Instance details: %v", err)
+		return err
+	}
+	log.Printf("Successfully retrieved instance: %s", inst.Name)
 	s.instance = inst
 	return nil
 }
@@ -308,6 +367,42 @@ func (s *Server) DeleteInstance() {
 		log.Printf("Could not delete instance: %s, with error: %v", *s.RemoteWindowsServer.Hostname, err)
 	}
 	log.Printf("Instance: %s shut down successfully", *s.RemoteWindowsServer.Hostname)
+}
+
+func (s *Server) GetInstanceName() string {
+	if s.instance == nil {
+		return ""
+	}
+
+	return s.instance.Name
+}
+
+func (s *Server) resetPasswordAndPopulateRemoteServer(useInternalIP bool) error {
+	// Reset password
+	username := "builder"
+	password, err := s.resetWindowsPassword(username)
+	if err != nil {
+		log.Printf("Failed to reset Windows password: %+v", err)
+		return err
+	}
+	// Get IP address.
+	ip, err := s.getIP(useInternalIP)
+	if err != nil {
+		log.Printf("Failed to get IP address: %+v", err)
+		return err
+	}
+
+	workspaceFolder := fmt.Sprintf(`C:\ws-%s`, uuid.New())
+
+	// Set and return Remote.
+	s.RemoteWindowsServer = RemoteWindowsServer{
+		Hostname:        &ip,
+		Username:        &username,
+		Password:        &password,
+		WorkspaceFolder: &workspaceFolder,
+	}
+
+	return nil
 }
 
 // getIP gets the IP for an instance (external or internal if using shared VPCs).
@@ -378,10 +473,21 @@ func (s *Server) resetWindowsPassword(username string) (string, error) {
 
 	//Write key to instance metadata and wait for op to complete
 	log.Print("Writing Windows instance metadata for password reset")
-	s.instance.Metadata.Items = append(s.instance.Metadata.Items, &compute.MetadataItems{
-		Key:   "windows-keys",
-		Value: &dstring,
-	})
+	var found bool
+	for _, mdi := range s.instance.Metadata.Items {
+		if mdi.Key == "windows-keys" {
+			log.Print("Altering current key")
+
+			mdi.Value = &dstring
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		s.instance.Metadata.Items = append(s.instance.Metadata.Items, &compute.MetadataItems{Key: "windows-keys", Value: &dstring})
+	}
+
 	op, err := s.service.Instances.SetMetadata(s.projectID, s.zone, s.instance.Name, &compute.Metadata{
 		Fingerprint: s.instance.Metadata.Fingerprint,
 		Items:       s.instance.Metadata.Items,
@@ -410,6 +516,7 @@ func (s *Server) resetWindowsPassword(username string) (string, error) {
 		for _, response := range responses {
 			var wpr WindowsPasswordResponse
 			if err := json.Unmarshal([]byte(response), &wpr); err != nil {
+				log.Printf("Cannot Unmarshal password: %v", err)
 				continue
 			}
 			if wpr.Modulus == wpc.Modulus {
