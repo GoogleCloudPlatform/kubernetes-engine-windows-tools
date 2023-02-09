@@ -29,7 +29,7 @@ import (
 )
 
 // Create the GCS bucket if it doesn't exist. The bucket is used to copy workspace over to Windows instances.
-func NewGCSBucketIfNotExists(ctx context.Context, projectID string, workspaceBucket string) error {
+func NewGCSBucketIfNotExists(ctx context.Context, projectID string, workspaceBucket string, workspaceBucketLocation string) error {
 	if workspaceBucket == "" {
 		log.Printf("No bucket name specified, skip creating the bucket")
 		return nil
@@ -43,7 +43,7 @@ func NewGCSBucketIfNotExists(ctx context.Context, projectID string, workspaceBuc
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 
-	lifecycleAttrs := &storage.BucketAttrs{
+	attrs := &storage.BucketAttrs{
 		Lifecycle: storage.Lifecycle{
 			Rules: []storage.LifecycleRule{
 				{
@@ -55,13 +55,21 @@ func NewGCSBucketIfNotExists(ctx context.Context, projectID string, workspaceBuc
 			},
 		},
 	}
+
+	if workspaceBucketLocation != "" {
+		attrs.Location = workspaceBucketLocation
+	}
+
 	bkt := client.Bucket(workspaceBucket)
 
+	// Retrieve the bucket's metadata to find if it already exists and
+	// that the code has access to the bucket
 	if _, err := bkt.Attrs(ctx); err == nil {
 		log.Printf("%v bucket already exists", workspaceBucket)
 		return nil
 	} else if err == storage.ErrBucketNotExist {
-		if err := bkt.Create(ctx, projectID, lifecycleAttrs); err == nil {
+		// The bucket does not exist. Try to create it
+		if err := bkt.Create(ctx, projectID, attrs); err == nil {
 			log.Printf("Bucket %v is setup", workspaceBucket)
 			return nil
 		} else {

@@ -31,30 +31,31 @@ import (
 )
 
 var (
-	projectID             = flag.String("project", "", "The project Id to use when creating the Windows Instance (uses gcloud default if not specified)")
-	workspacePath         = flag.String("workspace-path", "/workspace", "The directory to copy data from")
-	workspaceBucket       = flag.String("workspace-bucket", "", "The bucket to copy the directory to. Defaults to {project-id}_builder_tmp")
-	network               = flag.String("network", "default", "The VPC network to use when creating the Windows Instance (uses 'default' if not specified)")
-	networkProject        = flag.String("network-project", "", "The project where the VPC network is located (inferred if not specified).")
-	subnetwork            = flag.String("subnetwork", "default", "The Subnetwork name to use when creating the Windows Instance")
-	subnetworkProject     = flag.String("subnetwork-project", "", "The project where the Subnetwork is located (uses --network-project if not specified)")
-	region                = flag.String("region", "us-central1", "The region to create the Windows Instance in (where the Subnetwork is located)")
-	zone                  = flag.String("zone", "us-central1-f", "The zone name to use when creating the Windows Instance")
-	labels                = flag.String("labels", "", "List of label KEY=VALUE pairs separated by comma to add when creating the Windows Instance")
-	machineType           = flag.String("machineType", "", "The machine type to use when creating the Windows Instance")
-	bootDiskType          = flag.String("boot-disk-type", "pd-standard", "Windows instance boot disk type. Default value is pd-standard, other values include pd-ssd and pd-balanced")
-	bootDiskSizeGB        = flag.Int64("boot-disk-size-GB", 75, "Instance boot disk size (in GB). Must be at least 40 GB")
-	copyTimeout           = flag.Duration("copy-timeout", 5*time.Minute, "The workspace copy timeout in minutes")
-	serviceAccount        = flag.String("serviceAccount", "default", "The service account to use when creating the Windows Instance")
-	containerImageName    = flag.String("container-image-name", "", "The target container image:tag name")
-	pickedVersions        = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
-	reuseBuilderInstances = flag.Bool("reuse-builder-instances", false, "Look for existing instances by labels and instance-name-prefix and reuse them for build, create new instance only if none were found. Avoid when queuing parallel builds.")
-	instanceNamePrefix    = flag.String("instance-name-prefix", "windows-builder-", "Prefix to use for created GCE instances. Defaults to 'windows-builder-'")
-	testObsoleteVersion   = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
-	setupTimeout          = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
-	useInternalIP         = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
-	ExternalIP            = flag.Bool("external-ip", true, "Create external IP addresses for VMs, If false then Cloud NAT must be enabled, see README for details.")
-	skipFirewallCheck     = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
+	projectID               = flag.String("project", "", "The project Id to use when creating the Windows Instance (uses gcloud default if not specified)")
+	workspacePath           = flag.String("workspace-path", "/workspace", "The directory to copy data from")
+	workspaceBucket         = flag.String("workspace-bucket", "", "The bucket to copy the directory to. Defaults to {project-id}_builder_tmp")
+	workspaceBucketLocation = flag.String("workspace-bucket-location", "", "The location of the bucket. Defaults to 'us' which is the GCS API default location'")
+	network                 = flag.String("network", "default", "The VPC network to use when creating the Windows Instance (uses 'default' if not specified)")
+	networkProject          = flag.String("network-project", "", "The project where the VPC network is located (inferred if not specified).")
+	subnetwork              = flag.String("subnetwork", "default", "The Subnetwork name to use when creating the Windows Instance")
+	subnetworkProject       = flag.String("subnetwork-project", "", "The project where the Subnetwork is located (uses --network-project if not specified)")
+	region                  = flag.String("region", "us-central1", "The region to create the Windows Instance in (where the Subnetwork is located)")
+	zone                    = flag.String("zone", "us-central1-f", "The zone name to use when creating the Windows Instance")
+	labels                  = flag.String("labels", "", "List of label KEY=VALUE pairs separated by comma to add when creating the Windows Instance")
+	machineType             = flag.String("machineType", "", "The machine type to use when creating the Windows Instance")
+	bootDiskType            = flag.String("boot-disk-type", "pd-standard", "Windows instance boot disk type. Default value is pd-standard, other values include pd-ssd and pd-balanced")
+	bootDiskSizeGB          = flag.Int64("boot-disk-size-GB", 75, "Instance boot disk size (in GB). Must be at least 40 GB")
+	copyTimeout             = flag.Duration("copy-timeout", 5*time.Minute, "The workspace copy timeout in minutes")
+	serviceAccount          = flag.String("serviceAccount", "default", "The service account to use when creating the Windows Instance")
+	containerImageName      = flag.String("container-image-name", "", "The target container image:tag name")
+	pickedVersions          = flag.String("versions", "", "List of Windows Server versions user wants to support. If not provided, the container will be built to support all Windows versions that GKE supports")
+	reuseBuilderInstances   = flag.Bool("reuse-builder-instances", false, "Look for existing instances by labels and instance-name-prefix and reuse them for build, create new instance only if none were found. Avoid when queuing parallel builds.")
+	instanceNamePrefix      = flag.String("instance-name-prefix", "windows-builder-", "Prefix to use for created GCE instances. Defaults to 'windows-builder-'")
+	testObsoleteVersion     = flag.Bool("testonly-test-obsolete-versions", false, "If true, verify the obsolete Windows versions won't fail the builder. For testing purposes only")
+	setupTimeout            = flag.Duration("setup-timeout", 20*time.Minute, "Time out to wait for Windows instance to be ready for winrm connection and Docker setup")
+	useInternalIP           = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
+	ExternalIP              = flag.Bool("external-ip", true, "Create external IP addresses for VMs, If false then Cloud NAT must be enabled, see README for details.")
+	skipFirewallCheck       = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
 	// Windows version and GCE container image family map
 	// Note:
 	// 1. Mapping between version <-> image family name, NOT specific image name
@@ -124,7 +125,7 @@ func main() {
 
 func setupProjectForBuilder(ctx context.Context) error {
 	var err error
-	if err = builder.NewGCSBucketIfNotExists(ctx, *projectID, *workspaceBucket); err != nil {
+	if err = builder.NewGCSBucketIfNotExists(ctx, *projectID, *workspaceBucket, *workspaceBucketLocation); err != nil {
 		return fmt.Errorf("Failed creating bucket: %v, with error: %+v", *workspaceBucket, err)
 	}
 
