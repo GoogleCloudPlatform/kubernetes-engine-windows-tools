@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/googleapi"
 )
 
 // Create the GCS bucket if it doesn't exist. The bucket is used to copy workspace over to Windows instances.
@@ -57,15 +56,20 @@ func NewGCSBucketIfNotExists(ctx context.Context, projectID string, workspaceBuc
 		},
 	}
 	bkt := client.Bucket(workspaceBucket)
-	if err := bkt.Create(ctx, projectID, lifecycleAttrs); err != nil {
-		if e, ok := err.(*googleapi.Error); ok && e.Code == 409 {
-			log.Printf("%v bucket already exists", workspaceBucket)
+
+	if _, err := bkt.Attrs(ctx); err == nil {
+		log.Printf("%v bucket already exists", workspaceBucket)
+		return nil
+	} else if err == storage.ErrBucketNotExist {
+		if err := bkt.Create(ctx, projectID, lifecycleAttrs); err == nil {
+			log.Printf("Bucket %v is setup", workspaceBucket)
 			return nil
+		} else {
+			return fmt.Errorf("Create bucket(%q) with error: %+v", workspaceBucket, err)
 		}
-		return fmt.Errorf("Create bucket(%q) with error: %+v", workspaceBucket, err)
+	} else {
+		return fmt.Errorf("Find bucket(%q) with error: %+v", workspaceBucket, err)
 	}
-	log.Printf("Bucket %v is setup", workspaceBucket)
-	return nil
 }
 
 func writeZipToBucket(
