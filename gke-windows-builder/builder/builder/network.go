@@ -70,21 +70,13 @@ func usingSharedVPC(netConfig *InstanceNetworkConfig) bool {
 	return false
 }
 
-// ProjectNetworkUrls returns urls for referencing the network and subnetwork
-// in the InstanceNetworkConfig as global project-level resources. If an empty
-// url string is returned then subsequent GCE API calls should leave the
-// network or subnetwork blank so that the desired behavior will be inferred.
-func ProjectNetworkUrls(netConfig *InstanceNetworkConfig, instanceProject string) (string, string) {
-	var networkUrl, subnetUrl string
-	subnetUrl = computeUrlPrefix + *netConfig.SubnetProject + "/global/networks/" + *netConfig.Subnet
-
-	if usingSharedVPC(netConfig) {
-		log.Printf("Detected Shared VPC scenario, subnet will be specified and network will be inferred")
-		return networkUrl, subnetUrl
-	}
+// ProjectNetworkUrls returns urls for referencing the network
+// in the InstanceNetworkConfig as global project-level resources.
+func ProjectNetworkUrls(netConfig *InstanceNetworkConfig, instanceProject string) string {
+	var networkUrl string
 
 	networkUrl = computeUrlPrefix + *netConfig.NetworkProject + "/global/networks/" + *netConfig.Network
-	return networkUrl, subnetUrl
+	return networkUrl
 }
 
 // InstanceNetworkUrls returns urls for referencing the network and subnetwork
@@ -117,9 +109,9 @@ func CheckProjectFirewalls(ctx context.Context, netConfig *InstanceNetworkConfig
 		return fmt.Errorf("Failed to start GCE service for setup: %+v", err)
 	}
 
-	networkUrl, subnetUrl := ProjectNetworkUrls(netConfig, instanceProject)
+	networkUrl := ProjectNetworkUrls(netConfig, instanceProject)
 	projects := []string{*netConfig.NetworkProject, *netConfig.SubnetProject}
-	for i, url := range []string{networkUrl, subnetUrl} {
+	for i, url := range []string{networkUrl} {
 		if url == "" {
 			continue
 		}
