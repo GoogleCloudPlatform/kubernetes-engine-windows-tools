@@ -29,6 +29,7 @@ import (
 	random "math/rand"
 	"os/exec"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -45,7 +46,7 @@ const (
 // Setup the Winrm, disable the Windows Defender, install the docker if needed
 // Note: it'll restart the instance to make it effective
 var (
-	setupScriptPS1 = `
+	setupScriptPS1Template = template.Must(template.New("windows-startup-script-ps1").Parse(`
 # Disable Windows Defender service
 # Windows Defender may scan the C:\ProgramData\Docker\ folder, make it locked from docker build.
 # https://github.com/docker/for-win/issues/2117
@@ -83,6 +84,18 @@ function Install-Docker {
 	Write-Host "Installing latest Docker EE version"
 	Install-Package -Name docker -ProviderName DockerMsftProvider -Force -Verbose
 }
+{{if .AllowNondistributableArtifacts}}
+function Set-DockerAllowNondistributableArtifacts {
+	Write-Host 'Configuring Docker to push nondistributable artifacts to {{.AllowNondistributableArtifacts}}'
+	if (!(Test-Path 'C:\ProgramData\docker\config\daemon.json'))
+	{
+		 New-Item -Force -Path 'C:\ProgramData\docker\config' -Name 'daemon.json' -Type 'file' -Value '{}'
+	}
+	$config = Get-Content 'C:\ProgramData\docker\config\daemon.json' -raw | ConvertFrom-Json
+	$config | Add-Member -NotePropertyName 'allow-nondistributable-artifacts' -NotePropertyValue @('{{.AllowNondistributableArtifacts}}')
+	$config | ConvertTo-Json -depth 32 | Set-Content 'C:\ProgramData\docker\config\daemon.json'
+}
+{{end}}
 if (-not (Test-ContainersFeatureInstalled)) {
 	Install-ContainersFeature
 	Write-Host 'Restarting computer after enabling Windows Containers feature'
@@ -93,6 +106,9 @@ if (-not (Test-ContainersFeatureInstalled)) {
 if (-not (Test-DockerIsInstalled)) {
 	Install-Docker
 }
+{{if .AllowNondistributableArtifacts}}
+Set-DockerAllowNondistributableArtifacts
+{{end}}
 # For some reason the docker service may not be started automatically on the
 # first reboot, although it seems to work fine on subsequent reboots.
 Restart-Service docker
@@ -105,7 +121,7 @@ if (-not (Test-DockerIsRunning)) {
 winrm set winrm/config/service/auth '@{Basic="true"}'
 
 Write-Host 'Windows instance setup is completed'
-`
+`))
 )
 
 // Server encapsulates a GCE Instance.
@@ -267,6 +283,21 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		accessConfigs = nil
 	}
 
+	var setupScriptPS1Bytes bytes.Buffer
+
+	data := struct {
+		AllowNondistributableArtifacts *string
+	}{
+		AllowNondistributableArtifacts: bs.AllowNondistributableArtifacts,
+	}
+
+	if err := setupScriptPS1Template.Execute(&setupScriptPS1Bytes, data); err != nil {
+		log.Printf("Unable to template startup script: %v", err)
+		return err
+	}
+
+	setupScriptPS1 := setupScriptPS1Bytes.String()
+
 	// https://cloud.google.com/compute/docs/reference/rest/v1/instances#resource:-instance
 	instance := &compute.Instance{
 		Name:        name,
@@ -424,7 +455,7 @@ func (s *Server) getIP(useInternalIP bool) (string, error) {
 	return "", errors.New("Could not get external NAT IP from list")
 }
 
-//WindowsPasswordConfig stores metadata to be sent to GCE.
+// WindowsPasswordConfig stores metadata to be sent to GCE.
 type WindowsPasswordConfig struct {
 	key      *rsa.PrivateKey
 	password string
@@ -435,7 +466,7 @@ type WindowsPasswordConfig struct {
 	ExpireOn time.Time `json:"expireOn"`
 }
 
-//WindowsPasswordResponse stores data received from GCE.
+// WindowsPasswordResponse stores data received from GCE.
 type WindowsPasswordResponse struct {
 	UserName          string `json:"userName"`
 	PasswordFound     bool   `json:"passwordFound"`

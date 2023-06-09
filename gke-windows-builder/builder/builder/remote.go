@@ -39,19 +39,20 @@ type RemoteWindowsServer struct {
 
 // WindowsBuildServerConfig stores the configs of windows build server.
 type WindowsBuildServerConfig struct {
-	InstanceNamePrefix *string
-	ImageVersion       *string
-	ImageURL           *string
-	Zone               *string
-	NetworkConfig      *InstanceNetworkConfig
-	Labels             *string
-	MachineType        *string
-	ServiceAccount     *string
-	BootDiskType       *string
-	BootDiskSizeGB     int64
-	UseInternalIP      bool
-	ExternalNAT        bool
-	ReuseInstance      bool
+	InstanceNamePrefix             *string
+	ImageVersion                   *string
+	ImageURL                       *string
+	Zone                           *string
+	NetworkConfig                  *InstanceNetworkConfig
+	Labels                         *string
+	MachineType                    *string
+	ServiceAccount                 *string
+	BootDiskType                   *string
+	BootDiskSizeGB                 int64
+	UseInternalIP                  bool
+	ExternalNAT                    bool
+	ReuseInstance                  bool
+	AllowNondistributableArtifacts *string
 }
 
 // Wait for server to be available for Winrm connection and Docker setup.
