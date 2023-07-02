@@ -295,16 +295,16 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 
 	r.WorkspaceBucket = workspaceBucket
 	// Copy workspace to remote machine
-	log.Printf("Copying local workspace to remote machine: %v", r.Hostname)
+	log.Printf("Copying local workspace to remote machine: %v", *r.Hostname)
 	err = r.Copy(*workspacePath, *copyTimeout)
 	if err != nil {
-		log.Printf("Error copying workspace to %v : %+v", r.Hostname, err)
+		log.Printf("Error copying workspace to %v : %+v", *r.Hostname, err)
 		return builderServerStatus{s, err}
 	}
 
 	err = buildSingleArchContainerOnRemote(r, *containerImageName, ver, commandTimeout)
 	if err != nil {
-		log.Printf("Error building single arch container on remote %v : %+v", r.Hostname, err)
+		log.Printf("Error building single arch container on remote %v : %+v", *r.Hostname, err)
 		return builderServerStatus{s, err}
 	}
 	return builderServerStatus{s, nil}
