@@ -308,11 +308,9 @@ func (s *Server) newInstance(bs *WindowsBuildServerConfig) error {
 		Labels: bs.GetLabelsMap(),
 	}
 
-	networkUrl, subnetUrl := InstanceNetworkUrls(bs.NetworkConfig, s.projectID)
-	if networkUrl != "" {
-		instance.NetworkInterfaces[0].Network = networkUrl
-	}
+	subnetUrl := InstanceSubnetworkUrl(bs.NetworkConfig)
 	if subnetUrl != "" {
+		// Network will be inferred from the subnetwork
 		instance.NetworkInterfaces[0].Subnetwork = subnetUrl
 	}
 
@@ -424,7 +422,7 @@ func (s *Server) getIP(useInternalIP bool) (string, error) {
 	return "", errors.New("Could not get external NAT IP from list")
 }
 
-//WindowsPasswordConfig stores metadata to be sent to GCE.
+// WindowsPasswordConfig stores metadata to be sent to GCE.
 type WindowsPasswordConfig struct {
 	key      *rsa.PrivateKey
 	password string
@@ -435,7 +433,7 @@ type WindowsPasswordConfig struct {
 	ExpireOn time.Time `json:"expireOn"`
 }
 
-//WindowsPasswordResponse stores data received from GCE.
+// WindowsPasswordResponse stores data received from GCE.
 type WindowsPasswordResponse struct {
 	UserName          string `json:"userName"`
 	PasswordFound     bool   `json:"passwordFound"`

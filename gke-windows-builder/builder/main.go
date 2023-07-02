@@ -38,7 +38,7 @@ var (
 	network                 = flag.String("network", "default", "The VPC network to use when creating the Windows Instance (uses 'default' if not specified)")
 	networkProject          = flag.String("network-project", "", "The project where the VPC network is located (inferred if not specified).")
 	subnetwork              = flag.String("subnetwork", "default", "The Subnetwork name to use when creating the Windows Instance")
-	subnetworkProject       = flag.String("subnetwork-project", "", "The project where the Subnetwork is located (uses --network-project if not specified)")
+	subnetworkProject       = flag.String("subnetwork-project", "", "(deprecated) The project where the Subnetwork is located (uses --network-project instead)")
 	region                  = flag.String("region", "us-central1", "The region to create the Windows Instance in (where the Subnetwork is located)")
 	zone                    = flag.String("zone", "us-central1-f", "The zone name to use when creating the Windows Instance")
 	labels                  = flag.String("labels", "", "List of label KEY=VALUE pairs separated by comma to add when creating the Windows Instance")
@@ -95,6 +95,14 @@ func main() {
 		log.Fatalf("Error container-image-name flag is required but was not set")
 	}
 
+	if *networkProject != "" && *subnetworkProject != "" && *networkProject != *subnetworkProject {
+		log.Fatalf("When both network and subnetwork projects are set, they must be identical")
+	}
+	// subnetworkProject is deprecated. If only subnetwork was set, then copy its value to networkProject
+	if *subnetworkProject != "" && *networkProject == "" {
+		*networkProject = *subnetworkProject
+	}
+
 	pickedVersionMap := getPickedVersionMap(*pickedVersions)
 	// Add obsolete 1809 version for test
 	if *testObsoleteVersion {
@@ -133,7 +141,7 @@ func setupProjectForBuilder(ctx context.Context) error {
 		log.Printf("skipping checks that WinRM firewall rules exist")
 		return nil
 	}
-	return builder.CheckProjectFirewalls(ctx, builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, subnetworkProject, region), *projectID)
+	return builder.CheckProjectFirewalls(ctx, builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, region))
 }
 
 // Main building process
@@ -243,7 +251,7 @@ func buildSingleArchContainer(ctx context.Context, ver string, imageFamily strin
 	var s *builder.Server
 	var err error
 
-	netConfig := builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, subnetworkProject, region)
+	netConfig := builder.NewInstanceNetworkConfig(projectID, network, networkProject, subnetwork, region)
 	bsc := &builder.WindowsBuildServerConfig{
 		InstanceNamePrefix: instanceNamePrefix,
 		ImageVersion:       &ver,
