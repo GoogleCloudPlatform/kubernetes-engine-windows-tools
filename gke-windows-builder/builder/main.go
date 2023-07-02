@@ -137,7 +137,11 @@ func setupProjectForBuilder(ctx context.Context) error {
 		return fmt.Errorf("Failed creating bucket: %v, with error: %+v", *workspaceBucket, err)
 	}
 
-	if *skipFirewallCheck || *useInternalIP {
+	if *useInternalIP {
+		log.Printf("Using a VM without an external IP. Make sure your build is using a worker pool connected to the specified network.")
+	}
+
+	if *skipFirewallCheck {
 		log.Printf("skipping checks that WinRM firewall rules exist")
 		return nil
 	}
