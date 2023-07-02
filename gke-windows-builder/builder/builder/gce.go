@@ -199,15 +199,27 @@ func FindExistingInstance(ctx context.Context, bs *WindowsBuildServerConfig, pro
 		return nil, err
 	}
 
-	if len(instanceList.Items) == 0 {
+	foundInstancesList := []*compute.Instance{}
+
+	// Filter by network and subnetwork
+	for instance := range instanceList.Items {
+		//log.Printf("Network %s", instanceList.Items[instance].NetworkInterfaces[0].Network)
+		//log.Printf("Subnetwork %s", instanceList.Items[instance].NetworkInterfaces[0].Subnetwork)
+		if instanceList.Items[instance].NetworkInterfaces[0].Network == ProjectNetworkUrl(bs.NetworkConfig) &&
+			instanceList.Items[instance].NetworkInterfaces[0].Subnetwork == InstanceSubnetworkUrl(bs.NetworkConfig) {
+			foundInstancesList = append(foundInstancesList, instanceList.Items[instance])
+		}
+	}
+
+	if len(foundInstancesList) == 0 {
 		log.Printf("Found no relevant instances")
 		return nil, nil
 	}
 
 	random.Seed(time.Now().Unix())
-	chosenInstance := instanceList.Items[random.Intn(len(instanceList.Items))]
+	chosenInstance := foundInstancesList[random.Intn(len(foundInstancesList))]
 
-	log.Printf("Found %d relevant instances for version: %s, chose %s", len(instanceList.Items), *bs.ImageVersion, chosenInstance.Name)
+	log.Printf("Found %d relevant instances for version: %s, chose %s", len(foundInstancesList), *bs.ImageVersion, chosenInstance.Name)
 
 	return existingServer(ctx, *bs.Zone, projectID, chosenInstance.Name, bs.UseInternalIP)
 }
