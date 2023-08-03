@@ -72,16 +72,23 @@ function Test-DockerIsInstalled {
 function Test-DockerIsRunning {
 	return ((Get-Service docker).Status -eq 'Running')
 }
-# Installs Docker EE via the DockerMsftProvider. Ensure that the Windows
-# Containers feature is installed before calling this function; otherwise,
-# a restart may be needed after this function returns.
 function Install-Docker {
-	Write-Host 'Installing NuGet module'
-	Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
-	Write-Host 'Installing DockerMsftProvider module'
-	Install-Module -Name DockerMsftProvider -Repository PSGallery -Force
-	Write-Host "Installing latest Docker EE version"
-	Install-Package -Name docker -ProviderName DockerMsftProvider -Force -Verbose
+	if ((Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuild -ge '20348') {
+		Write-Host "Installing latest Docker CE version"
+		Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/Windows-Containers/Main/helpful_tools/Install-DockerCE/install-docker-ce.ps1" -o install-docker-ce.ps1
+		.\install-docker-ce.ps1
+		Remove-Item install-docker-ce.ps1
+	} else {
+		# Installs Docker EE via the DockerMsftProvider. Ensure that the Windows
+		# Containers feature is installed before calling this function; otherwise,
+		# a restart may be needed after this function returns.
+		Write-Host 'Installing NuGet module'
+		Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+		Write-Host 'Installing DockerMsftProvider module'
+		Install-Module -Name DockerMsftProvider -Repository PSGallery -Force
+		Write-Host "Installing latest Docker EE version"
+		Install-Package -Name docker -ProviderName DockerMsftProvider -Force -Verbose
+	}
 }
 if (-not (Test-ContainersFeatureInstalled)) {
 	Install-ContainersFeature
