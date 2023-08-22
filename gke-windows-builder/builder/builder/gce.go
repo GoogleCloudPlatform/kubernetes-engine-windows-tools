@@ -76,12 +76,17 @@ function Test-DockerIsRunning {
 # Containers feature is installed before calling this function; otherwise,
 # a restart may be needed after this function returns.
 function Install-Docker {
-	Write-Host 'Installing NuGet module'
-	Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
-	Write-Host 'Installing DockerMsftProvider module'
-	Install-Module -Name DockerMsftProvider -Repository PSGallery -Force
-	Write-Host "Installing latest Docker EE version"
-	Install-Package -Name docker -ProviderName DockerMsftProvider -Force -Verbose
+	# Docker CE is supported for Windows Server 2022 and on
+	if ([System.Environment]::OSVersion.Version.Build -lt 20348) {
+		throw "This version of Windows is incompatible with Docker CE"
+	}
+
+	# Based on https://learn.microsoft.com/virtualization/windowscontainers/quick-start/set-up-environment?tabs=dockerce#windows-server-1
+	Write-Host "Installing latest Docker CE version"
+	$scriptFile = "$env:Temp\install-docker-ce.ps1"
+	Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/Windows-Containers/Main/helpful_tools/Install-DockerCE/install-docker-ce.ps1" -o $scriptFile
+	.$scriptFile
+	Remove-Item $scriptFile
 }
 if (-not (Test-ContainersFeatureInstalled)) {
 	Install-ContainersFeature
