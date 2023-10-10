@@ -114,7 +114,7 @@ func winRMIngressIsAllowed(service *compute.Service, networkProject string, netw
 	}
 	for _, rule := range firewalls.Items {
 		for _, allowed := range rule.Allowed {
-			if rule.Network == networkUrl && rule.Direction == "INGRESS" && allowed.IPProtocol == "tcp" && rule.SourceRanges[0] == "0.0.0.0/0" && !rule.Disabled {
+			if rule.Network == networkUrl && rule.Direction == "INGRESS" && allowed.IPProtocol == "tcp" && len(rule.SourceRanges) > 0 && rule.SourceRanges[0] == "0.0.0.0/0" && !rule.Disabled {
 				for _, port := range allowed.Ports {
 					if port == "5986" {
 						log.Printf("found an INGRESS firewall rule for tcp:5986 in project %s", networkProject)
