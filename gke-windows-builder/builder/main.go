@@ -63,7 +63,7 @@ var (
 	versionMap = map[string]string{
 		"2004":     "windows-cloud/global/images/family/windows-2004-core",
 		"20H2":     "windows-cloud/global/images/family/windows-20h2-core",
-		"ltsc2019": "windows-cloud/global/images/family/windows-2019-core-for-containers",
+		"ltsc2019": "windows-cloud/global/images/family/windows-2019-core",
 		"ltsc2022": "windows-cloud/global/images/family/windows-2022-core",
 	}
 	commandTimeout = 10 * time.Minute

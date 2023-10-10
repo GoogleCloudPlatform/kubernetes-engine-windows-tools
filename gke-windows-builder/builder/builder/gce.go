@@ -67,7 +67,8 @@ function Install-ContainersFeature {
 	Install-WindowsFeature Containers
 }
 function Test-DockerIsInstalled {
-	return ((Get-Package -ProviderName DockerMsftProvider -ErrorAction SilentlyContinue | Where-Object Name -eq 'docker') -ne $null)
+	$service = Get-Service -Name docker -ErrorAction SilentlyContinue
+	return ($service -ne $null)
 }
 function Test-DockerIsRunning {
 	return ((Get-Service docker).Status -eq 'Running')
@@ -76,11 +77,6 @@ function Test-DockerIsRunning {
 # Containers feature is installed before calling this function; otherwise,
 # a restart may be needed after this function returns.
 function Install-Docker {
-	# Docker CE is supported for Windows Server 2022 and on
-	if ([System.Environment]::OSVersion.Version.Build -lt 20348) {
-		throw "This version of Windows is incompatible with Docker CE"
-	}
-
 	# Based on https://learn.microsoft.com/virtualization/windowscontainers/quick-start/set-up-environment?tabs=dockerce#windows-server-1
 	Write-Host "Installing latest Docker CE version"
 	$scriptFile = "$env:Temp\install-docker-ce.ps1"
