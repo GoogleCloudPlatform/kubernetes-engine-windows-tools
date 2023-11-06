@@ -148,7 +148,9 @@ func (r *RemoteWindowsServer) copyViaBucket(ctx context.Context, inputPath strin
 $ErrorActionPreference = "Stop"
 $ProgressPreference = 'SilentlyContinue'
 gsutil cp %q %s.zip
-Expand-Archive -Path %s.zip -DestinationPath %s -Force
+Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -value 1
+Add-Type -Assembly "System.IO.Compression.Filesystem";
+[System.IO.Compression.ZipFile]::ExtractToDirectory("%s.zip", "%s");
 Remove-Item -Path %s.zip -Force
 `, gsURL, *r.WorkspaceFolder, *r.WorkspaceFolder, *r.WorkspaceFolder, *r.WorkspaceFolder)
 
