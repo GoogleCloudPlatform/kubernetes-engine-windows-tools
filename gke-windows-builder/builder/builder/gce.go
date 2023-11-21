@@ -388,6 +388,16 @@ func (s *Server) GetInstanceName() string {
 	return s.instance.Name
 }
 
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func RandStringRunes(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[random.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
+
 func (s *Server) resetPasswordAndPopulateRemoteServer(useInternalIP bool) error {
 	// Reset password
 	username := "builder"
@@ -403,7 +413,7 @@ func (s *Server) resetPasswordAndPopulateRemoteServer(useInternalIP bool) error 
 		return err
 	}
 
-	workspaceFolder := fmt.Sprintf(`C:\ws-%s`, uuid.New())
+	workspaceFolder := fmt.Sprintf(`C:\%s`, RandStringRunes(5))
 
 	// Set and return Remote.
 	s.RemoteWindowsServer = RemoteWindowsServer{
