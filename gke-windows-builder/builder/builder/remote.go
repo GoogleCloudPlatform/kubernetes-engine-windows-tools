@@ -147,7 +147,7 @@ func (r *RemoteWindowsServer) copyViaBucket(ctx context.Context, inputPath strin
 	pwrScript := fmt.Sprintf(`
 $ErrorActionPreference = "Stop"
 $ProgressPreference = 'SilentlyContinue'
-gsutil cp %q %s.zip
+gcloud storage cp %q %s.zip
 Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -value 1
 Add-Type -Assembly "System.IO.Compression.Filesystem";
 [System.IO.Compression.ZipFile]::ExtractToDirectory("%s.zip", "%s");
