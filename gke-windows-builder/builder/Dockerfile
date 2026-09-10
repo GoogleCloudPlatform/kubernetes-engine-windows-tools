@@ -1,4 +1,4 @@
-FROM golang AS build-env
+FROM golang:1.26 AS build-env
 
 # If this directory is changed here it must also be changed for the COPY
 # statements at the end of this Dockerfile. Arg expansion in COPY statements
@@ -10,7 +10,7 @@ ADD ./ /go/src/builder
 WORKDIR /go/src/builder
 
 # Build the builder tool.
-RUN GO111MODULE=on CGO_ENABLED=0 go build -o /go/bin/main
+RUN CGO_ENABLED=0 go build -o /go/bin/main
 
 # Pull the source for some additional packages so that their license files can
 # be manually included in the image. Note that this license file capturing is
@@ -31,7 +31,7 @@ RUN mkdir -p $NOTICES/github.com/chzyer/logex; wget https://raw.githubuserconten
 # The size of the tarball is about 117 MB.
 RUN tar -c /go/pkg/mod/* /go/src/builder -z -f /gke-windows-builder-source.tar.gz
 
-FROM gcr.io/distroless/base-debian10
+FROM gcr.io/distroless/base-debian12
 COPY --from=build-env /go/bin/main /bin/main
 COPY --from=build-env /gke-windows-builder-source.tar.gz /
 COPY --from=build-env /THIRD_PARTY_NOTICES/ /THIRD_PARTY_NOTICES/
