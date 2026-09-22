@@ -56,6 +56,7 @@ var (
 	useInternalIP           = flag.Bool("use-internal-ip", false, "Use internal IP addresses (for shared VPCs), also implies no need for firewall rules")
 	ExternalIP              = flag.Bool("external-ip", true, "Create external IP addresses for VMs, If false then Cloud NAT must be enabled, see README for details.")
 	skipFirewallCheck       = flag.Bool("skip-firewall-check", false, "Skip checking that the project has a firewall rule permitting WinRM ingress")
+	dockerfileName          = flag.String("dockerfile", "Dockerfile", "Name of the Dockerfile to use in the build process. Defaults to 'Dockerfile'")
 	// Windows version and GCE container image family map
 	// Note:
 	// 1. Mapping between version <-> image family name, NOT specific image name
@@ -379,9 +380,9 @@ func buildSingleArchContainerOnRemote(
 	buildSingleArchContainerScript := fmt.Sprintf(`
 	$env:DOCKER_CLI_EXPERIMENTAL = 'enabled'
 	gcloud auth --quiet configure-docker %[3]s
-	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s %[4]s .
+	docker build -t %[1]s_%[2]s --build-arg WINDOWS_VERSION=%[2]s -f %[4]s %[5]s .
 	docker push %[1]s_%[2]s
-	`, containerImageName, version, registry, buildargs)
+	`, containerImageName, version, registry, *dockerfileName, buildargs)
 
 	log.Printf("Start to build single-arch container with commands: %s", buildSingleArchContainerScript)
 	return r.RunCommand(winrm.Powershell(buildSingleArchContainerScript), *r.WorkspaceFolder, timeout)
